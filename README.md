@@ -79,7 +79,7 @@ pip install -r requirements.txt
 ```toml
 OPENAI_API_KEY = "your-api-key-here"
 PROMPT_ID = "pmpt_68f663c9400081968c77a12c68f176e80438728839e32f32"
-PROMPT_VERSION = "4"
+PROMPT_VERSION = "5"
 ```
 
 或使用環境變數：
