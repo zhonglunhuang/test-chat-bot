@@ -67,23 +67,34 @@ with st.sidebar:
 
     st.divider()
 
-    # Developer Message 顯示區
-    st.subheader("🔧 Developer Message")
-    if st.session_state.developer_message:
-        with st.expander("查看完整訊息", expanded=False):
-            st.code(st.session_state.developer_message, language="json")
-    else:
-        st.info("尚無開發者訊息")
+    st.subheader("💡 使用說明與範例")
 
-    st.divider()
-
-    st.subheader("ℹ️ 使用說明")
+    st.markdown("### 如何使用")
     st.markdown("""
     1. 在下方輸入框輸入訊息
     2. 按 Enter 發送
     3. AI 會記住完整對話上下文
     4. 重新整理頁面對話記錄不會消失
     """)
+
+    st.markdown("### 📝 範例 Prompt")
+    st.code("""請幫我參照以下內容改寫一篇電子報
+
+主題：2025年數據分析師必備技能
+
+內容素材：
+1. 掌握 AI 落地應用趨勢
+2. 了解公司現況在 AI 發展優勢（以 Shutterstock 為例）
+3. 善用自動化減少日常採集資料工作""", language="text")
+
+    st.divider()
+
+    # Developer Message 顯示區（摺疊）
+    with st.expander("🔧 Developer Message", expanded=False):
+        if st.session_state.developer_message:
+            st.code(st.session_state.developer_message, language="json")
+        else:
+            st.info("尚無開發者訊息")
 
 # 標題和說明
 st.title("📝 Lisa老師專屬文案助手")
