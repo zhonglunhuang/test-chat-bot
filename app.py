@@ -5,13 +5,29 @@ import streamlit as st
 from openai import OpenAI
 import os
 import json
+from datetime import datetime
 
 # 設定頁面配置
 st.set_page_config(
     page_title="Lisa老師專屬文案助手",
     page_icon="📝",
-    layout="wide"
+    layout="wide",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
 )
+
+# 隱藏 Streamlit 右上角選單和 footer
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # 初始化 OpenAI 客戶端
 @st.cache_resource
@@ -43,8 +59,8 @@ PROMPT_ID, PROMPT_VERSION = get_prompt_config()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "developer_message" not in st.session_state:
-    st.session_state.developer_message = ""
+if "api_logs" not in st.session_state:
+    st.session_state.api_logs = []
 
 # 保留文字原始格式
 def format_text_with_breaks(text):
@@ -57,7 +73,7 @@ with st.sidebar:
 
     if st.button("🗑️ 清除對話歷史", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.developer_message = ""
+        st.session_state.api_logs = []
         st.rerun()
 
     st.divider()
@@ -89,12 +105,18 @@ with st.sidebar:
 
     st.divider()
 
-    # Developer Message 顯示區（摺疊）
-    with st.expander("🔧 Developer Message", expanded=False):
-        if st.session_state.developer_message:
-            st.code(st.session_state.developer_message, language="json")
+    # API 呼叫 Log 顯示區
+    with st.expander("📋 API 呼叫記錄", expanded=False):
+        if st.session_state.api_logs:
+            st.caption(f"共 {len(st.session_state.api_logs)} 筆記錄")
+            for idx, log in enumerate(reversed(st.session_state.api_logs), 1):
+                with st.container():
+                    st.markdown(f"**#{len(st.session_state.api_logs) - idx + 1}** - {log['timestamp']}")
+                    st.json(log['data'])
+                    if idx < len(st.session_state.api_logs):
+                        st.divider()
         else:
-            st.info("尚無開發者訊息")
+            st.info("尚無 API 呼叫記錄")
 
 # 標題和說明
 st.title("📝 Lisa老師專屬文案助手")
@@ -134,6 +156,9 @@ if prompt := st.chat_input("輸入訊息..."):
                 # 當前輸入
                 current_input = f"{conversation_context}使用者: {prompt}"
 
+                # 記錄 API 請求開始時間
+                request_time = datetime.now()
+
                 # 呼叫 OpenAI Responses API
                 response = client.responses.create(
                     prompt={
@@ -143,14 +168,9 @@ if prompt := st.chat_input("輸入訊息..."):
                     input=current_input
                 )
 
-                # 儲存 developer message
-                st.session_state.developer_message = json.dumps({
-                    "prompt_id": PROMPT_ID,
-                    "prompt_version": PROMPT_VERSION,
-                    "input_length": len(current_input),
-                    "response_type": str(type(response)),
-                    "response_attrs": [attr for attr in dir(response) if not attr.startswith('_')]
-                }, indent=2, ensure_ascii=False)
+                # 記錄 API 回應時間
+                response_time = datetime.now()
+                elapsed_time = (response_time - request_time).total_seconds()
 
                 # 解析回應
                 ai_message = ""
@@ -184,6 +204,27 @@ if prompt := st.chat_input("輸入訊息..."):
                 if not ai_message:
                     ai_message = "抱歉，無法解析 AI 回應。"
 
+                # 記錄完整的 API 呼叫 log
+                api_log = {
+                    "timestamp": request_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "data": {
+                        "request": {
+                            "prompt_id": PROMPT_ID,
+                            "prompt_version": PROMPT_VERSION,
+                            "input_preview": prompt[:100] + "..." if len(prompt) > 100 else prompt,
+                            "input_length": len(current_input),
+                            "context_messages": len(st.session_state.messages) - 1
+                        },
+                        "response": {
+                            "success": True,
+                            "output_preview": ai_message[:200] + "..." if len(ai_message) > 200 else ai_message,
+                            "output_length": len(ai_message),
+                            "elapsed_time_seconds": round(elapsed_time, 2)
+                        }
+                    }
+                }
+                st.session_state.api_logs.append(api_log)
+
                 # 處理換行並顯示回應
                 formatted_ai_message = format_text_with_breaks(ai_message)
                 st.markdown(formatted_ai_message)
@@ -196,8 +237,20 @@ if prompt := st.chat_input("輸入訊息..."):
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
-                # 更新 developer message
-                st.session_state.developer_message = json.dumps({
-                    "error": str(e),
-                    "error_type": type(e).__name__
-                }, indent=2, ensure_ascii=False)
+                # 記錄錯誤到 API log
+                error_log = {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "data": {
+                        "request": {
+                            "prompt_id": PROMPT_ID,
+                            "prompt_version": PROMPT_VERSION,
+                            "input_preview": prompt[:100] + "..." if len(prompt) > 100 else prompt
+                        },
+                        "response": {
+                            "success": False,
+                            "error": str(e),
+                            "error_type": type(e).__name__
+                        }
+                    }
+                }
+                st.session_state.api_logs.append(error_log)
