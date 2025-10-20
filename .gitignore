@@ -26,6 +26,7 @@ secrets.toml
 
 # Streamlit
 .streamlit/
+.streamlit_data/
 
 # Logs
 *.log
