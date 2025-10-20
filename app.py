@@ -72,7 +72,8 @@ with st.sidebar:
 # 顯示對話歷史
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        # 保留換行格式
+        st.write(message["content"])
 
 # 聊天輸入框
 if prompt := st.chat_input("輸入訊息..."):
@@ -128,8 +129,8 @@ if prompt := st.chat_input("輸入訊息..."):
                 if not ai_message:
                     ai_message = "抱歉，無法解析 AI 回應。"
 
-                # 顯示回應
-                st.markdown(ai_message)
+                # 顯示回應（保留換行格式）
+                st.write(ai_message)
 
                 # 加入到對話歷史
                 st.session_state.messages.append({"role": "assistant", "content": ai_message})
