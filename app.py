@@ -6,7 +6,7 @@ from openai import OpenAI
 import os
 import json
 from datetime import datetime
-import streamlit.components.v1 as components
+from pathlib import Path
 
 # 設定頁面配置
 st.set_page_config(
