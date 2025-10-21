@@ -6,7 +6,7 @@ from openai import OpenAI
 import os
 import json
 from datetime import datetime
-from pathlib import Path
+import streamlit.components.v1 as components
 
 # 設定頁面配置
 st.set_page_config(
@@ -29,6 +29,71 @@ header {visibility: hidden;}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# localStorage 同步腳本
+def render_localStorage_sync():
+    """在頁面載入時從 localStorage 讀取資料，並在資料變更時儲存"""
+    sync_script = """
+    <script>
+    // 確保只執行一次
+    if (!window.localStorageInitialized) {
+        window.localStorageInitialized = true;
+
+        // 從 localStorage 讀取資料
+        function loadData() {
+            try {
+                const messages = localStorage.getItem('lisa_chat_messages');
+                const apiLogs = localStorage.getItem('lisa_chat_api_logs');
+
+                return {
+                    messages: messages ? JSON.parse(messages) : [],
+                    api_logs: apiLogs ? JSON.parse(apiLogs) : []
+                };
+            } catch (e) {
+                console.error('Error loading from localStorage:', e);
+                return { messages: [], api_logs: [] };
+            }
+        }
+
+        // 將資料傳送給 Streamlit
+        const data = loadData();
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: data
+        }, '*');
+
+        console.log('Loaded from localStorage:', data);
+    }
+    </script>
+    """
+    return components.html(sync_script, height=0)
+
+def save_to_localStorage(key, data):
+    """儲存資料到 localStorage"""
+    json_str = json.dumps(data, ensure_ascii=False).replace("'", "\\'").replace('"', '\\"')
+    save_script = f"""
+    <script>
+    try {{
+        const data = JSON.parse("{json_str}");
+        localStorage.setItem('{key}', JSON.stringify(data));
+        console.log('Saved to localStorage {key}:', data.length, 'items');
+    }} catch (e) {{
+        console.error('Error saving to localStorage:', e);
+    }}
+    </script>
+    """
+    components.html(save_script, height=0)
+
+def clear_localStorage():
+    """清除 localStorage"""
+    clear_script = """
+    <script>
+    localStorage.removeItem('lisa_chat_messages');
+    localStorage.removeItem('lisa_chat_api_logs');
+    console.log('Cleared localStorage');
+    </script>
+    """
+    components.html(clear_script, height=0)
 
 # 初始化 OpenAI 客戶端
 @st.cache_resource
@@ -56,7 +121,18 @@ def get_prompt_config():
 client = init_openai_client()
 PROMPT_ID, PROMPT_VERSION = get_prompt_config()
 
-# 初始化 session state（僅在瀏覽器 session 中保存，不跨使用者）
+# 從 localStorage 載入資料（頁面載入時）
+if "loaded_from_storage" not in st.session_state:
+    st.session_state.loaded_from_storage = False
+    local_data = render_localStorage_sync()
+
+    # 如果成功載入資料
+    if local_data and isinstance(local_data, dict):
+        st.session_state.messages = local_data.get('messages', [])
+        st.session_state.api_logs = local_data.get('api_logs', [])
+        st.session_state.loaded_from_storage = True
+
+# 初始化 session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -75,12 +151,16 @@ with st.sidebar:
     if st.button("🗑️ 清除對話歷史", use_container_width=True):
         st.session_state.messages = []
         st.session_state.api_logs = []
+        clear_localStorage()
         st.rerun()
 
     st.divider()
 
     st.subheader("📊 對話統計")
     st.metric("訊息數量", len(st.session_state.messages))
+
+    if st.session_state.loaded_from_storage and len(st.session_state.messages) > 0:
+        st.success("✅ 已從瀏覽器載入歷史記錄")
 
     st.divider()
 
@@ -92,7 +172,8 @@ with st.sidebar:
     2. 按 Enter 發送
     3. AI 會記住完整對話上下文
     4. 每個使用者的對話記錄是獨立的
-    5. 關閉分頁後對話記錄會清除
+    5. **重新整理頁面對話記錄會保留**
+    6. 對話記錄儲存在您的瀏覽器中（隱私安全）
     """)
 
     st.markdown("### 📝 範例 Prompt")
@@ -140,14 +221,14 @@ if prompt := st.chat_input("輸入訊息..."):
 
     # 加入到對話歷史
     st.session_state.messages.append({"role": "user", "content": prompt})
+    # 儲存到 localStorage
+    save_to_localStorage('lisa_chat_messages', st.session_state.messages)
 
     # 顯示 AI 回應
     with st.chat_message("assistant"):
         with st.spinner("Lisa老師正在思考中..."):
             try:
                 # 準備完整的對話歷史（上下文記憶）
-                # 注意：OpenAI Responses API 目前可能不支援多輪對話
-                # 這裡我們將歷史對話合併到 input 中
                 conversation_context = ""
                 if len(st.session_state.messages) > 1:
                     # 將之前的對話整理成上下文
@@ -226,6 +307,8 @@ if prompt := st.chat_input("輸入訊息..."):
                     }
                 }
                 st.session_state.api_logs.append(api_log)
+                # 儲存到 localStorage
+                save_to_localStorage('lisa_chat_api_logs', st.session_state.api_logs)
 
                 # 處理換行並顯示回應
                 formatted_ai_message = format_text_with_breaks(ai_message)
@@ -233,11 +316,15 @@ if prompt := st.chat_input("輸入訊息..."):
 
                 # 加入到對話歷史（儲存原始內容）
                 st.session_state.messages.append({"role": "assistant", "content": ai_message})
+                # 儲存到 localStorage
+                save_to_localStorage('lisa_chat_messages', st.session_state.messages)
 
             except Exception as e:
                 error_msg = f"❌ 錯誤: {str(e)}"
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                # 儲存到 localStorage
+                save_to_localStorage('lisa_chat_messages', st.session_state.messages)
 
                 # 記錄錯誤到 API log
                 error_log = {
@@ -256,3 +343,5 @@ if prompt := st.chat_input("輸入訊息..."):
                     }
                 }
                 st.session_state.api_logs.append(error_log)
+                # 儲存到 localStorage
+                save_to_localStorage('lisa_chat_api_logs', st.session_state.api_logs)
