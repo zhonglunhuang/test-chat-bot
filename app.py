@@ -6,7 +6,7 @@ from openai import OpenAI
 import os
 import json
 from datetime import datetime
-from pathlib import Path
+import streamlit.components.v1 as components
 
 # 設定頁面配置
 st.set_page_config(
@@ -49,7 +49,7 @@ def init_openai_client():
 def get_prompt_config():
     """取得 Prompt ID 和版本（優先使用 secrets）"""
     prompt_id = st.secrets.get("PROMPT_ID", "pmpt_68f663c9400081968c77a12c68f176e80438728839e32f32")
-    prompt_version = st.secrets.get("PROMPT_VERSION", "5")
+    prompt_version = st.secrets.get("PROMPT_VERSION", "6")
     return prompt_id, prompt_version
 
 # 初始化
