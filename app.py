@@ -56,49 +56,12 @@ def get_prompt_config():
 client = init_openai_client()
 PROMPT_ID, PROMPT_VERSION = get_prompt_config()
 
-# 設定儲存路徑
-STORAGE_DIR = Path(".streamlit_data")
-STORAGE_DIR.mkdir(exist_ok=True)
-MESSAGES_FILE = STORAGE_DIR / "messages.json"
-API_LOGS_FILE = STORAGE_DIR / "api_logs.json"
-
-# 載入和儲存對話記錄的函數
-def load_messages():
-    """從檔案載入對話記錄"""
-    if MESSAGES_FILE.exists():
-        try:
-            with open(MESSAGES_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return []
-    return []
-
-def save_messages(messages):
-    """儲存對話記錄到檔案"""
-    with open(MESSAGES_FILE, 'w', encoding='utf-8') as f:
-        json.dump(messages, f, ensure_ascii=False, indent=2)
-
-def load_api_logs():
-    """從檔案載入 API 記錄"""
-    if API_LOGS_FILE.exists():
-        try:
-            with open(API_LOGS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return []
-    return []
-
-def save_api_logs(logs):
-    """儲存 API 記錄到檔案"""
-    with open(API_LOGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(logs, f, ensure_ascii=False, indent=2)
-
-# 初始化 session state（對話記錄持久化）
+# 初始化 session state（僅在瀏覽器 session 中保存，不跨使用者）
 if "messages" not in st.session_state:
-    st.session_state.messages = load_messages()
+    st.session_state.messages = []
 
 if "api_logs" not in st.session_state:
-    st.session_state.api_logs = load_api_logs()
+    st.session_state.api_logs = []
 
 # 保留文字原始格式
 def format_text_with_breaks(text):
@@ -112,8 +75,6 @@ with st.sidebar:
     if st.button("🗑️ 清除對話歷史", use_container_width=True):
         st.session_state.messages = []
         st.session_state.api_logs = []
-        save_messages([])
-        save_api_logs([])
         st.rerun()
 
     st.divider()
@@ -130,7 +91,8 @@ with st.sidebar:
     1. 在下方輸入框輸入訊息
     2. 按 Enter 發送
     3. AI 會記住完整對話上下文
-    4. 重新整理頁面對話記錄不會消失
+    4. 每個使用者的對話記錄是獨立的
+    5. 關閉分頁後對話記錄會清除
     """)
 
     st.markdown("### 📝 範例 Prompt")
@@ -178,7 +140,6 @@ if prompt := st.chat_input("輸入訊息..."):
 
     # 加入到對話歷史
     st.session_state.messages.append({"role": "user", "content": prompt})
-    save_messages(st.session_state.messages)  # 立即儲存
 
     # 顯示 AI 回應
     with st.chat_message("assistant"):
@@ -265,7 +226,6 @@ if prompt := st.chat_input("輸入訊息..."):
                     }
                 }
                 st.session_state.api_logs.append(api_log)
-                save_api_logs(st.session_state.api_logs)  # 立即儲存 API log
 
                 # 處理換行並顯示回應
                 formatted_ai_message = format_text_with_breaks(ai_message)
@@ -273,13 +233,11 @@ if prompt := st.chat_input("輸入訊息..."):
 
                 # 加入到對話歷史（儲存原始內容）
                 st.session_state.messages.append({"role": "assistant", "content": ai_message})
-                save_messages(st.session_state.messages)  # 立即儲存
 
             except Exception as e:
                 error_msg = f"❌ 錯誤: {str(e)}"
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                save_messages(st.session_state.messages)  # 立即儲存
 
                 # 記錄錯誤到 API log
                 error_log = {
@@ -298,4 +256,3 @@ if prompt := st.chat_input("輸入訊息..."):
                     }
                 }
                 st.session_state.api_logs.append(error_log)
-                save_api_logs(st.session_state.api_logs)  # 立即儲存
